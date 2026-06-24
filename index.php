@@ -59,14 +59,31 @@ if (!empty($qr['expires_at']) && strtotime($qr['expires_at']) < time()) {
     exit('Este QR ha expirado.');
 }
 
-// 4. Sumar escaneo
+// 4. Sumar escaneo global
 $pdo->prepare("
     UPDATE qr_codes
     SET scan_count = scan_count + 1
     WHERE id = ?
 ")->execute([$qr['id']]);
 
-// 5. Redirigir
+// 5. Registrar escaneo detallado en qr_scans (best-effort)
+try {
+    $ua     = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 300);
+    $device = 'desktop';
+    if (preg_match('/mobile|android|iphone/i', $ua)) {
+        $device = 'mobile';
+    } elseif (preg_match('/ipad|tablet/i', $ua)) {
+        $device = 'tablet';
+    }
+    $pdo->prepare("
+        INSERT INTO qr_scans (qr_id, device_type)
+        VALUES (?, ?)
+    ")->execute([$qr['id'], $device]);
+} catch (Exception $e) {
+    // Tabla no creada aún — no interrumpe el flujo del escaneo
+}
+
+// 6. Redirigir
 $url = trim($qr['target_url']);
 
 if (empty($url)) {
